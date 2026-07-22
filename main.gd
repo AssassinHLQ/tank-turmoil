@@ -183,6 +183,21 @@ func save_progress() -> void:
 	var _save_error := save.save(SAVE_PATH)
 
 func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		# Keep Android Back inside the game and open the in-game settings panel.
+		if intro_playing:
+			finish_intro()
+		elif music_picker_open:
+			music_picker_open = false
+			queue_redraw()
+		elif settings_open:
+			settings_open = false
+			queue_redraw()
+		elif mode > 0:
+			paused = true
+			pause_settings_open = true
+			queue_redraw()
+		return
 	# Recheck after the player returns from Windows Settings. Avoid polling and
 	# process spawning during a match.
 	if what == NOTIFICATION_APPLICATION_FOCUS_IN and is_node_ready():
@@ -1171,7 +1186,12 @@ func circle_hits_wall(p: Vector2, radius: float) -> bool:
 	return false
 
 func _unhandled_input(event: InputEvent) -> void:
-	if intro_playing: return
+	if intro_playing:
+		# Permit a tap/click/Space to skip the startup video on touch devices too.
+		var skip_intro: bool = (event is InputEventScreenTouch and event.pressed) or (event is InputEventMouseButton and event.pressed) or (event is InputEventKey and event.pressed and not event.echo and (event.keycode == KEY_SPACE or event.keycode == KEY_ESCAPE))
+		if skip_intro:
+			finish_intro()
+		return
 	if event is InputEventKey and event.keycode == KEY_SPACE and not event.pressed:
 		suppress_space_fire = false
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -1282,6 +1302,10 @@ func handle_touch(id: int, pos: Vector2, pressed: bool) -> void:
 		return
 	if round_over and pressed and Rect2(190, 300, 620, 170).has_point(pos) and next_round_timer <= 0.0:
 		new_round(); return
+	if countdown > 0.0 and pressed:
+		countdown = 0.0
+		queue_redraw()
+		return
 	if not pressed:
 		if id == move_touch_id: move_touch_id = -1; touch_move = Vector2.ZERO
 		elif id == fire_touch_id: fire_touch_id = -1
@@ -1491,7 +1515,7 @@ func _draw() -> void:
 		draw_circle(p.pos, 3.0 + alpha * 3.0, pc)
 	draw_string(ThemeDB.fallback_font, Vector2(26, 43), "TANK  TROUBLE", HORIZONTAL_ALIGNMENT_LEFT, -1, 25, ui_text())
 	draw_string(ThemeDB.fallback_font, Vector2(455, 43), "%d  :  %d" % scores, HORIZONTAL_ALIGNMENT_LEFT, -1, 27, ui_text())
-	var mode_text := ("隐藏模式" if ai_count == 5 else "游戏开发部") if mode == 1 else ("本地双人" if mode == 2 else "BOSS：优香")
+	var mode_text := ("隐藏模式" if ai_count == 5 else "游戏开发部") if mode == 1 else ("本地双人" if mode == 2 else "BOSS: 优香")
 	draw_string(ThemeDB.fallback_font, Vector2(835, 40), mode_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, ui_muted())
 	if mode == 3 and tanks.size() > 1 and tanks[1].alive:
 		draw_string(ThemeDB.fallback_font, Vector2(790, 68), "BOSS 耐久", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("6f2ca8"))
@@ -1527,7 +1551,8 @@ func _draw() -> void:
 		draw_circle(count_center, 54, Color(1, 1, 1, 0.88))
 		var count_baseline := count_center.y + count_font.get_ascent(48) * 0.5
 		draw_string(count_font, Vector2(count_center.x - 55.0, count_baseline), count_text, HORIZONTAL_ALIGNMENT_CENTER, 110, 48, Color("333333"))
-		draw_string(count_font, Vector2(count_center.x - 90.0, count_center.y + 82.0), "空格跳过", HORIZONTAL_ALIGNMENT_CENTER, 180, 15, ui_muted())
+		var skip_hint := "点击屏幕或按空格跳过" if mobile else "按空格跳过"
+		draw_string(count_font, Vector2(count_center.x - 150.0, count_center.y + 82.0), skip_hint, HORIZONTAL_ALIGNMENT_CENTER, 300, 15, ui_muted())
 
 func view_offset() -> Vector2:
 	return (get_viewport_rect().size - Vector2(W, H)) * 0.5
@@ -1589,7 +1614,7 @@ func draw_menu() -> void:
 	draw_setting_row(247, "电脑数量", str(ai_count), 38.0)
 	var challenge_label := "隐藏模式：优香 VS 游戏开发部全员" if ai_count == 5 else "挑战游戏开发部"
 	draw_button(Rect2(270, 315, 460, 54), challenge_label, Color("46a96b"))
-	var boss_label := "BOSS：优香（角色已解锁）" if boss_character_unlocked else "BOSS：优香（击败后解锁）"
+	var boss_label := "BOSS: 优香（角色已解锁）" if boss_character_unlocked else "BOSS: 优香（击败后解锁）"
 	draw_button(Rect2(270, 381, 460, 54), boss_label, Color("8e44d6"))
 	draw_button(Rect2(270, 447, 460, 54), "本地双人对战", Color("ff5c74"))
 	draw_button(Rect2(270, 513, 460, 54), "设置", Color("537a8a"))
